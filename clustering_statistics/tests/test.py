@@ -1,7 +1,8 @@
 """
-salloc -N 1 -C "gpu&hbm80g" -t 02:00:00 --gpus 4 --qos interactive --account desi_g
-source /global/common/software/desi/users/adematti/cosmodesi_environment.sh main
-srun -n 4 python test.py
+salloc -N 1 -C "gpu&hbm80g" -t 00:30:00 --gpus 4 --qos interactive --account desi_g
+source /global/common/software/desi/users/adematti/cosmodesi_environment.sh new
+cd ~/dev/desi-clustering/clustering_statistics
+srun -n 4 python tests/test.py
 """
 import os
 import sys
@@ -66,15 +67,24 @@ def test_spectrum3(stats=['mesh3_spectrum']):
             compute_stats_from_options(stats, catalog=catalog_options, get_stats_fn=functools.partial(tools.get_stats_fn, stats_dir=stats_dir), mesh3_spectrum={'basis': 'scoccimarro', 'ells': [0, 2]})
 
 
-def test_recon(stat='recon_particle2_correlation'):
+def test_recon(stat='recon_particle2_correlation', todo='nran'):
     stats_dir = Path(Path(os.getenv('SCRATCH')) / 'clustering-measurements-checks')
-    stat = 'mesh2_spectrum'
+    stat = ['recon_mesh2_spectrum', 'recon_particle2_correlation']
     for tracer in ['LRG']:
         zrange = tools.propose_fiducial('zranges', tracer)[0]
         for region in ['NGC', 'SGC'][:1]:
-            catalog_options = dict(version='holi-v1-altmtl', tracer=tracer, zrange=zrange, region=region, imock=451, nran=2)
-            catalog_options.update(expand={'parent_randoms_fn': tools.get_catalog_fn(kind='parent_randoms', version='data-dr2-v2', tracer=tracer, nran=catalog_options['nran'])})
-            compute_stats_from_options(stat, catalog=catalog_options, get_stats_fn=functools.partial(tools.get_stats_fn, stats_dir=stats_dir), mesh2_spectrum={}, particle2_correlation={})
+            if todo == 'nran':
+                for nran in range(2,8):
+                    catalog_options = dict(version='holi-v1-altmtl', tracer=tracer, zrange=zrange, region=region, imock=451, nran=nran)
+                    catalog_options.update(expand={'parent_randoms_fn': tools.get_catalog_fn(kind='parent_randoms', version='data-dr2-v2', tracer=tracer, nran=catalog_options['nran'])})
+                    
+                    compute_stats_from_options(stat, catalog=catalog_options, get_stats_fn=functools.partial(tools.get_stats_fn, stats_dir=stats_dir, extra=f"nran{nran}"), mesh2_spectrum={}, particle2_correlation={})
+            elif todo == 'cellsize':
+                for cellsize in [6,7,8]:
+                    catalog_options = dict(version='holi-v1-altmtl', tracer=tracer, zrange=zrange, region=region, imock=451, nran=8)
+                    catalog_options.update(expand={'parent_randoms_fn': tools.get_catalog_fn(kind='parent_randoms', version='data-dr2-v2', tracer=tracer, nran=catalog_options['nran'])})
+
+                    compute_stats_from_options(stat, catalog=catalog_options, get_stats_fn=functools.partial(tools.get_stats_fn, stats_dir=stats_dir, extra=f"cellsize{cellsize}"), mesh2_spectrum={}, particle2_correlation={}, recon={'mattrs':dict(boxsize=5700., cellsize=cellsize)})
 
 
 def test_expand_randoms(stat='mesh2_spectrum'):
@@ -149,16 +159,16 @@ def test_norm():
 if __name__ == '__main__':
 
     os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '0.9'
-    #jax.distributed.initialize()
+    jax.distributed.initialize()
     setup_logging()
-    test_stats_fn()
-    test_auw(stats=['mesh2_spectrum'])
-    test_bitwise(stats=['mesh2_spectrum'])
-    test_expand_randoms()
-    test_optimal_weights()
-    test_cross()
+    # test_stats_fn()
+    # test_auw(stats=['mesh2_spectrum'])
+    # test_bitwise(stats=['mesh2_spectrum'])
+    # test_expand_randoms()
+    # test_optimal_weights()
+    # test_cross()
     #test_window()
     #test_spectrum3()
-    test_norm()
-    test_recon()
+    # test_norm()
+    test_recon(todo='cellsize')
     #jax.distributed.shutdown()
