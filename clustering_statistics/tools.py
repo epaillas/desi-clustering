@@ -53,7 +53,6 @@ def join_tracers(tracers):
         return 'x'.join(tracers)
     return tracers
 
-
 def get_simple_tracer(tracer):
     """Given input tracer, return simple tracer name; e.g. 'ELG_LOPnotqso' would result in 'ELG'."""
     if 'BGS' in tracer:
@@ -204,8 +203,8 @@ def select_region(ra, dec, region=None):
         return (~mask_ngc) & mask_s
     if region == 'NGCnoN':
         return mask_ngc & (~mask_n)
-    # if region == 'GCcomb_noNorth':
-    #     return ~mask_n
+    if region == 'noN':
+        return ~mask_n
 
     # DES footprint
     north, south, des = load_footprint().get_imaging_surveys()
@@ -218,8 +217,8 @@ def select_region(ra, dec, region=None):
         return (~mask_ngc) & mask_s & (~mask_des)
     if region == 'SGCnoDES':
         return (~mask_ngc) & (~mask_des)
-    # if region == 'GCcomb_noDES':
-    #     return ~mask_des
+    if region == 'noDES':
+        return ~mask_des
 
     # Other footprints
     if region == 'ACT_DR6':
@@ -613,9 +612,9 @@ def get_catalog_fn(version=None, cat_dir=None, kind='data', tracer='LRG',
         Multiple file names are returned as a list when region is 'ALL' or when kind is 'randoms' or 'full_randoms', or imock is '*'.
     """
     # these are region splits that require loading NGC+SGC
-    special_regions = ['S', 'ALL', 'SnoDES', 'ACT_DR6', 'PLANCK_PR4'] + [f'GAL0{i}' for i in [20, 40, 60, 70, 80, 90, 97, 99]]
+    special_regions = ['S', 'ALL', 'noN', 'noDES', 'SnoDES', 'ACT_DR6', 'PLANCK_PR4'] + [f'GAL0{i}' for i in [20, 40, 60, 70, 80, 90, 97, 99]]
     if region in ['N', 'NGC', 'NGCnoN']: region = 'NGC'
-    elif region in ['SGC', 'SGCnoDES', 'DES']: region = 'SGC'
+    elif region in ['SGC', 'SGCnoDES', 'DES', 'SSGC']: region = 'SGC'
     elif 'full' not in kind:
         if region in special_regions: regions = ['NGC', 'SGC']
         else: raise NotImplementedError(f'{region} is unknown')
@@ -1080,7 +1079,7 @@ def read_clustering_catalog(kind=None, concatenate=True, get_catalog_fn=get_cata
     zrange, region, weight_type, imock, tracer = (kwargs.get(key) for key in ['zrange', 'region', 'weight', 'imock', 'tracer'])
     assert weight_type is not None, 'provide weight'
     # these are region splits that require loading NGC+SGC
-    special_regions = ['S', 'ALL', 'SnoDES', 'ACT_DR6', 'PLANCK_PR4'] + [f'GAL0{i}' for i in [20, 40, 60, 70, 80, 90, 97, 99]]
+    special_regions = ['S', 'ALL', 'SnoDES', 'noDES', 'ACT_DR6', 'PLANCK_PR4'] + [f'GAL0{i}' for i in [20, 40, 60, 70, 80, 90, 97, 99]]
     reshuffle_condition = kind == 'randoms' and (isinstance(reshuffle, dict) or (reshuffle is not None))
     if reshuffle_condition:
         # if randoms are going to be reshuffled, all regions are needed so we force it.
@@ -1212,7 +1211,6 @@ def read_clustering_catalog(kind=None, concatenate=True, get_catalog_fn=get_cata
     else:
         return rdzw
 
-
 @default_mpicomm
 def read_full_catalog(kind, wntile=None, concatenate=True,
                      get_catalog_fn=get_catalog_fn, mpicomm=None, attrs_only=False, **kwargs):
@@ -1340,7 +1338,6 @@ def possible_combine_regions(regions):
             combs[_region_comb] = _regions
     return combs
 
-
 def compute_fkp_effective_redshift(*fkps, cellsize=10., order=2, split=None, fields=None, func_of_z=lambda x: x,
                                    resampler='cic', return_fraction=False):
     """
@@ -1401,7 +1398,6 @@ def compute_fkp_effective_redshift(*fkps, cellsize=10., order=2, split=None, fie
 
     return compute_fkp_normalization_z(*randoms)
 
-
 def combine_stats(observables):
     """Combine input observables (e.g. NGC and SGC); of :mod:`lsstypes` type."""
     import copy
@@ -1435,7 +1431,6 @@ def combine_stats(observables):
 
     return observable
 
-
 def merge_catalogs(output: str | Path, inputs: list[str | Path], factor: float=1., seed: int=42, read_catalog=_read_catalog, **kwargs):
     import numpy as np
     from mockfactory import Catalog
@@ -1456,7 +1451,6 @@ def merge_catalogs(output: str | Path, inputs: list[str | Path], factor: float=1
             mem()
     catalog = Catalog.concatenate(catalogs, intersection=True)
     catalog.write(output)
-
 
 def merge_randoms_catalogs(output: str | Path, inputs: list[str | Path], parent_randoms_fn=None, factor: float=1., seed=42,
                            read_catalog=_read_catalog, expand_randoms=expand_randoms, **kwargs):
