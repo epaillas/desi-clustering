@@ -14,13 +14,13 @@ Within the base directory there are sub-directories corresponding to the data an
 Furthermore, within each of these there is a corresponding directory relevant to each key project:
 * ```full_shape```
 * ```png_local```
-* ``lensing``
+* ```lensing```
+* ```merged```: Merged data catalogs used for reshuffling the randoms to estimate the RIC. This folder only exists for mocks.
 
 Finally, within each we save the clustering products to folders named based on the statistic:
 * ```pk```: power spectrum measurements.
 * ```bk```: bispectrum measurements.
 * ```xi```: two-point correlation function measurements.
-* ```merged```: Merged data catalogs used for reshuffling the randoms to estimate the RIC. This folder only exists for mocks.
 
 ## Documentation
 ### Reading clustering statistics
