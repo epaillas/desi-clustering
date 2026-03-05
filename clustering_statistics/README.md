@@ -6,18 +6,18 @@ This repository contains…
 The base directory is 
 ```/global/cfs/cdirs/desi/mocks/cai/LSS/DA2/mocks/desipipe/``` TODO: Establish an official directory.
 
-Within the base directory there are sub-directories corresponding to the data and mocks clustering products. Below we list them:
+Within the base directory, sub-directories correspond to the data and mocks clustering products. Below we list them:
 * ```glam-uchuu-v1-altmtl```
 * ```holi-v1-altmtl```
 * ```abacus-2ndgen-complete```
 
-Furthermore, within each of these there is a corresponding directory relevant to each key project:
+Furthermore, within each of these, there is a corresponding directory relevant to each key project:
 * ```full_shape```
 * ```png_local```
 * ```lensing```
 * ```merged```: Merged data catalogs used for reshuffling the randoms to estimate the RIC. This folder only exists for mocks.
 
-Finally, within each we save the clustering products to folders named based on the statistic:
+Finally, within each, we save the clustering products to folders named based on the statistic:
 * ```pk```: power spectrum measurements.
 * ```bk```: bispectrum measurements.
 * ```xi```: two-point correlation function measurements.
@@ -34,7 +34,7 @@ All clustering products follow a `base_filename` structure such that `base_filen
   * For `full_shape`: (0.4, 0.6), (0.6, 0.8), (0.8, 1.1), (1.1, 1.6), (0.8, 2.1)
   * For `png_local`:  (0.4, 1.1), (0.8, 1.6), (0.8, 3.5)
 
-* `weight_type`: identifies how the tracers were weighted. Theis can be any combination of weights, but the default choices are dependant on the KP and are `default-FKP` ('full shape') and `default-oqe` ('local png').
+* `weight_type`: identifies how the tracers were weighted. This can be any combination of weights, but the default choices are dependent on the KP and are `default-FKP` ('full shape') and `default-oqe` ('local png').
 
 * `extra` is a suffix that can be any combination of extra processing done before, during, or after the measurement, separated by an underscore (`_`). Some default choices below:
     *  `_thetacut`: $\theta$-cut removes all pairs with angular separation < 0.05°, to mitigate fiber assignment effects.
