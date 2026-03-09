@@ -220,6 +220,8 @@ def prepare_fiducial_likelihoods(
                     branch = branch.get(ells=list(bs_cuts['ells']))
                 if bs_cuts.get('kmin') is not None and bs_cuts.get('kmax_b0') is not None:
                     branch = branch.select(k=(bs_cuts['kmin'], bs_cuts['kmax_b0']))
+                if bs_cuts.get('rebin') is not None and bs_cuts['rebin'] > 1:
+                    branch = branch.select(k=slice(0, None, bs_cuts['rebin']))
                 if (2, 0, 2) in list(bs_cuts.get('ells', [])) and bs_cuts.get('kmin') is not None and bs_cuts.get('kmax_b2') is not None:
                     branch = branch.at(ells=(2, 0, 2)).select(k=(bs_cuts['kmin'], bs_cuts['kmax_b2']))
 
