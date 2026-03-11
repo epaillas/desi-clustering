@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 import numpy as np
-from numpy import linalg
+import scipy as sp
 import lsstypes as types
 
 from clustering_statistics.tools import (float2str, get_full_tracer, get_simple_tracer, _make_tuple,
@@ -44,7 +44,10 @@ def get_cosmology():
         'logA':     {'fixed': False, 'prior': {'dist': 'uniform', 'limits': [2.0,  4.0]}},
     }
     for name, config in params.items():
-        cosmo.init.params[name].update(**config)
+        if name in cosmo.init.params:
+            cosmo.init.params[name].update(**config)
+        else:
+            cosmo.init.params[name] = config
     return cosmo, fiducial
 
 
@@ -84,12 +87,12 @@ def _get_default_theory_nuisance_priors(model, stat, prior_basis, b3_coev=True, 
         params['b1p'] = {'prior': {'dist': 'uniform', 'limits': [0.1, 4]}}
         params['b2p'] = {'prior': {'dist': 'norm', 'loc': 0, 'scale': 5}}
         params['bsp'] = {'prior': {'dist': 'norm', 'loc': -2. / 7. * sigma8_fid**2, 'scale': 5}}
-        if b3_coev:
-            params['b3p'] = {'fixed': True}
-        else:
-            params['b3p'] = {'prior': {'dist': 'norm', 'loc': 23. / 42. * sigma8_fid**4, 'scale': sigma8_fid**4},
-                             'fixed': False}
         if 'mesh2_spectrum' in stat:
+            if b3_coev:
+                params['b3p'] = {'fixed': True}
+            else:
+                params['b3p'] = {'prior': {'dist': 'norm', 'loc': 23. / 42. * sigma8_fid**4, 'scale': sigma8_fid**4},
+                                 'fixed': False}
             # ── PS counter-terms and shot noise ───────────────────────────────
             for n in [0, 2, 4]:
                 params[f'alpha{n:d}p'] = {'prior': {'dist': 'norm', 'loc': 0, 'scale': scale_eft}}
@@ -117,11 +120,11 @@ def _get_default_theory_nuisance_priors(model, stat, prior_basis, b3_coev=True, 
         params['b1'] = {'prior': {'dist': 'uniform', 'limits': [1e-5, 10]}}
         params['b2'] = {'prior': {'dist': 'uniform', 'limits': [-50, 50]}}
         params['bs'] = {'prior': {'dist': 'uniform', 'limits': [-50, 50]}}
-        if b3_coev:
-            params['b3'] = {'fixed': True}
-        else:
-            params['b3'] = {'prior': {'dist': 'norm', 'loc': 0, 'scale': 1}, 'fixed': False}
         if 'mesh2_spectrum' in stat:
+            if b3_coev:
+                params['b3'] = {'fixed': True}
+            else:
+                params['b3'] = {'prior': {'dist': 'norm', 'loc': 0, 'scale': 1}, 'fixed': False}
             # ── PS counter-terms and shot noise ───────────────────────────────
             for n in [0, 2, 4]:
                 params[f'alpha{n:d}'] = {'prior': {'dist': 'norm', 'loc': 0, 'scale': scale_eft}}
@@ -151,30 +154,31 @@ def get_theory(stat: str, theory: dict, z: float, cosmo, fiducial):
     from desilike.theories.galaxy_clustering import (DirectPowerSpectrumTemplate, REPTVelocileptorsTracerPowerSpectrumMultipoles,
     FOLPSv2TracerPowerSpectrumMultipoles, FOLPSv2TracerBispectrumMultipoles)
     template = DirectPowerSpectrumTemplate(fiducial=fiducial, cosmo=cosmo, z=z)
+    theory_options = theory
     theory = None
     if 'mesh2_spectrum' in stat:
-        if theory['model'] == 'reptvelocileptors':
-            theory = REPTVelocileptorsTracerPowerSpectrumMultipoles(template=template, **theory.get('options', {}))
-        elif theory['model'] in ['folpsD', 'folpsEFT']:
-            kw = {name: theory[name] for name in ['damping', 'prior_basis', 'b3_coev']}
-            theory = FOLPSv2TracerPowerSpectrumMultipoles(template=template, **kw, **theory.get('options', {}))
-            sigma8_fid = fiducial.get_fourier().sigma8(of='cb', z=z)
-            params = _get_default_theory_nuisance_priors(theory['model'], stat, prior_basis=kw['prior_basis'], b3_coev=kw['b3_coev'], sigma8_fid=sigma8_fid)
+        if theory_options['model'] == 'reptvelocileptors':
+            theory = REPTVelocileptorsTracerPowerSpectrumMultipoles(template=template, **theory_options.get('options', {}))
+        elif theory_options['model'] in ['folpsD', 'folpsEFT']:
+            kw = {name: theory_options[name] for name in ['damping', 'prior_basis', 'b3_coev']}
+            theory = FOLPSv2TracerPowerSpectrumMultipoles(template=template, **kw, **theory_options.get('options', {}))
+            sigma8_fid = fiducial.get_fourier().sigma8_z(of='delta_cb', z=z)
+            params = _get_default_theory_nuisance_priors(theory_options['model'], stat, prior_basis=kw['prior_basis'], b3_coev=kw['b3_coev'], sigma8_fid=sigma8_fid)
             for name, config in params.items():
                 theory.init.params[name].update(**config)
-            if theory['marg']:
+            if theory_options['marg']:
                 for param in theory.init.params.select(basename=['alpha*', 'sn*']):
                     param.update(derived='.auto')
     elif 'mesh3_spectrum' in stat:
-        if theory['model'] in ['folpsD', 'folpsEFT']:
-            kw = {name: theory[name] for name in ['damping', 'prior_basis', 'b3_coev']}
-            theory = FOLPSv2TracerBispectrumMultipoles(template=template, **kw, **theory.get('options', {}))
-            sigma8_fid = fiducial.get_fourier().sigma8(of='cb', z=z)
-            params = _get_default_theory_nuisance_priors(theory['model'], stat, prior_basis=kw['prior_basis'], b3_coev=kw['b3_coev'], sigma8_fid=sigma8_fid)
+        if theory_options['model'] in ['folpsD', 'folpsEFT']:
+            kw = {name: theory_options[name] for name in ['damping', 'prior_basis']}
+            theory = FOLPSv2TracerBispectrumMultipoles(template=template, **kw, **theory_options.get('options', {}))
+            sigma8_fid = fiducial.get_fourier().sigma8_z(of='delta_cb', z=z)
+            params = _get_default_theory_nuisance_priors(theory_options['model'], stat, prior_basis=kw['prior_basis'], sigma8_fid=sigma8_fid)
             for name, config in params.items():
                 theory.init.params[name].update(**config)
     if theory is None:
-        raise ValueError(f'theory not found for {stat} and {repr(theory)}')
+        raise ValueError(f'theory not found for {stat} and {repr(theory_options)}')
     return theory
 
 
@@ -187,7 +191,7 @@ def pack_stats(stats, **labels):
         observables = [window.observable for window in windows]
         theories = [window.theory for window in windows]
         return types.WindowMatrix(
-            value=linalg.block_diag(*values),
+            value=sp.linalg.block_diag(*values),
             observable=pack_stats(observables, **labels),
             theory=pack_stats(theories, **labels),
         )
@@ -217,7 +221,8 @@ def get_stats(observables: list, covariance: dict=None, unpack: bool=False, get_
         cache_dir = Path(cache_dir)
         _str_from_options = str_from_likelihood_options({'observables': observables_options, 'covariance': covariance}, level={'catalog': 100, 'select': 100})
         cache_fn = cache_dir / 'prepared_stats' / f'{_str_from_options}.h5'
-        if cache_fn.exists():
+        if False: #cache_fn.exists():
+            logger.info(f'Reading cached stats {cache_fn}.')
             likelihood = types.read(cache_fn)
             if unpack:
                 return unpack_stats(likelihood)
@@ -233,20 +238,22 @@ def get_stats(observables: list, covariance: dict=None, unpack: bool=False, get_
         file_kwargs: keyword arguments to pass to get_stats_fn.
         """
         for observable_options in observables_options:
-            stat = observable_options['stat']
+            stat = observable_options['stat']['kind']
             tracers = _make_tuple(observable_options['catalog']['tracer'])
             version = observable_options['catalog'].get('version', None)
-            for tracer in tracers:
-                full_tracer = get_full_tracer(tracer, version=version)
-                n_fields = 3 if 'mesh3' in stat else 2
-                simple_tracers = get_simple_tracer(tracer)
-                simple_tracers += (simple_tracers[-1],) * (n_fields - len(simple_tracers))
-                labels = {
-                    'observables': get_simple_stats(stat),
-                    'tracers': simple_tracers,
-                }
-                file_kw = observable_options['catalog'] | {'tracer': full_tracer} | kwargs
-                yield stat, labels, file_kw, dict(observable_options)
+            full_tracer = get_full_tracer(tracers, version=version)
+            nfields = 3 if 'mesh3' in stat else 2
+            simple_tracers = get_simple_tracer(tracers)
+            simple_tracers += (simple_tracers[-1],) * (nfields - len(simple_tracers))
+            labels = {
+                'observables': get_simple_stats(stat),
+                'tracers': simple_tracers,
+            }
+            kw = {}
+            if nfields == 3:
+                kw['basis'] = observable_options['stat']['basis']
+            file_kw = kw | observable_options['catalog'] | {'tracer': full_tracer} | kwargs
+            yield stat, labels, file_kw, dict(observable_options)
 
     def _apply_select(observable: types.ObservableTree, select: dict=None):
         if select is None:
@@ -259,7 +266,8 @@ def get_stats(observables: list, covariance: dict=None, unpack: bool=False, get_
                 edge = pole.edges(coord_name)[0]
                 rebin = int(np.rint(np.mean(step / (edge[..., 1] - edge[..., 0]))) + 0.5)
                 observable = observable.at(ells=ell).select(**{coord_name: slice(0, None, rebin)})
-            observable = observable.at(ells=ell).select(**{coord_name: limit[:2]})
+            observable = observable.at(ells=ell).select(**{coord_name: tuple(limit[:2])})
+        observable = observable.get(ells=list(select))
         return observable
 
     # Loading data, window
@@ -272,7 +280,7 @@ def get_stats(observables: list, covariance: dict=None, unpack: bool=False, get_
             data = types.mean(mocks)
         else:
             data = types.read(fn)
-        data = _apply_select(data, select=kw.get('select', None))
+        data = _apply_select(data, select=kw['stat'].get('select', None))
         for field, value in labels.items():
             joint_labels[field].append(value)
         file_kw = dict(file_kw)
@@ -285,14 +293,13 @@ def get_stats(observables: list, covariance: dict=None, unpack: bool=False, get_
         loaded_window.append(window)
 
     data = pack_stats(loaded_data, **joint_labels)
-    window = pack_stats(loaded_window, joint_labels)
+    window = pack_stats(loaded_window, **joint_labels)
 
     # Mock-based covariance
     all_fns = []
     for stat, labels, file_kw, kw in iter_stat_tracer_combinations(observables_options):
-        file_kw = file_kw | covariance
+        file_kw = file_kw | {'imock': '*'} | covariance
         file_kw['tracer'] = get_full_tracer(file_kw['tracer'], version=file_kw['version'])
-        file_kw.setdefault('imock', '*')
         all_fns.append(get_stats_fn(kind=stat, **file_kw))
     all_fns = list(zip(*all_fns, strict=True))  # get a list of list of file names
     mocks = []
@@ -301,6 +308,7 @@ def get_stats(observables: list, covariance: dict=None, unpack: bool=False, get_
             mock = types.ObservableTree([types.read(fn) for fn in fns], **joint_labels)
             mocks.append(mock)
     covariance = types.cov(mocks)
+    covariance.attrs['nobs'] = len(mocks)
     covariance = covariance.at.observable.match(data)
     likelihood = types.GaussianLikelihood(
         observable=data,
@@ -329,7 +337,7 @@ def get_single_likelihood(likelihood_options, stats: types.GaussianLikelihood=No
     labels = covariance.observable.labels(level=1)
     observables = []
     for observable_options, data, window, label in zip(observables_options, data, windows, labels, strict=True):
-        stat = observable_options['stat']
+        stat = observable_options['stat']['kind']
         if 'mesh2_spectrum' in stat:
             cls = TracerSpectrum2PolesObservable
         elif 'mesh3_spectrum' in stat:
@@ -344,17 +352,18 @@ def get_single_likelihood(likelihood_options, stats: types.GaussianLikelihood=No
         observable()
         if observable_options['emulator'] is not None:
             assert cache_dir is not None, 'cache_dir must be provided for emulator'
+            cache_dir = Path(cache_dir)
             filename = cache_dir / _str_from_observable_options(observable_options, level={'theory': 100, 'catalog': 2}) / 'emulator.npy'
             filename.parent.mkdir(parents=True, exist_ok=True)
             from desilike.emulators import EmulatedCalculator, Emulator, TaylorEmulatorEngine
             if filename.exists():
-                logger.info(f'Loading emulator {filename}')
+                logger.info(f'Reading cached emulator {filename}')
                 emulated_pt = EmulatedCalculator.load(filename)
             else:
                 logger.info(f'Fitting emulator {filename}')
                 emulator = Emulator(
                     theory.pt,
-                    engine=TaylorEmulatorEngine(method='finite', order=observable_options['emulate'].get('order', 3)),
+                    engine=TaylorEmulatorEngine(method='finite', order=observable_options['emulator'].get('order', 3)),
                 )
                 emulator.set_samples()
                 emulator.fit()
@@ -393,21 +402,20 @@ def propose_fiducial_observable_options(stat, tracer=None, zrange=None):
     """
     Propose fiducial fitting options for given tracer and input kind.
     """
-    propose_select = {'mesh2_spectrum': {0: [0.02, 0.2, 0.005], 2: [0.02, 0.2, 0.005]},
-                      'mesh3_spectrum': {(0, 0, 0): [0.02, 0.12, 0.005],
-                                        (2, 0, 2): [0.02, 0.08, 0.005]},
-                                        'basis': 'sugiyama-diagonal'}
-    select = None
-    for _stat in propose_select:
-        if _stat in stat:
-            select = propose_select[_stat]
-            break
-    propose_fiducial = {'stat': stat,
-                        'select': select,
+    propose_fiducial = {'stat': {'kind': stat},
                         'catalog': {'weight': 'default-FKP'},
                         'theory': {'model': 'folpsD', 'prior_basis': 'physical_aap', 'damping': 'lor', 'marg': True},
                         'emulator': {},
                         'window': {}}
+    propose_stat = {'mesh2_spectrum': {'select': {0: [0.02, 0.2, 0.005], 2: [0.02, 0.2, 0.005]}},
+                      'mesh3_spectrum': {'select': {(0, 0, 0): [0.02, 0.12, 0.005], (2, 0, 2): [0.02, 0.08, 0.005]},
+                                         'basis': 'sugiyama-diagonal'}}
+    propose_theory = {'mesh2_spectrum': {'b3_coev': True},
+                      'mesh3_spectrum': {}}
+    for _stat in propose_stat:
+        if _stat in stat:
+            propose_fiducial['stat'].update(propose_stat[_stat])
+            propose_fiducial['theory'].update(propose_theory[_stat])
     return propose_fiducial
 
 
@@ -425,20 +433,19 @@ def propose_fiducial_sampler_options(sampler=None):
 def propose_fiducial_profiler_options(profiler=None):
     if profiler is None:
         profiler = 'minuit'
-    fiducial_options = {'profiler': profiler, 'init': {},' run': {}}
+    fiducial_options = {'profiler': profiler, 'init': {}, 'maximize': {}}
     return fiducial_options
 
 
 def fill_fiducial_observable_options(options):
     """Fill missing options with fiducial values."""
     options = dict(options)
-    stat = options['stat']
+    stat = options['stat']['kind']
     tracer, zrange = (options['catalog'][name] for name in ['tracer', 'zrange'])
     fiducial_options = propose_fiducial_observable_options(stat, tracer, zrange)
     options = fiducial_options | options
     for key, value in options.items():
-        if key != 'stat':
-            options[key] = fiducial_options[key] | value
+        options[key] = fiducial_options[key] | value
     return options
 
 
@@ -456,10 +463,9 @@ def fill_fiducial_options(options):
     likelihoods = options.get('likelihoods', None)
     if likelihoods is not None:
         options['likelihoods'] = fill_fiducial_likelihood_options(options['likelihoods'])
-    name = 'sampler'
-    options[name] = propose_fiducial_sampler_options(options[name].get('sampler')) | options[name]
-    name = 'profiler'
-    options[name] = propose_fiducial_profiler_options(options[name].get('profiler')) | options[name]
+    for name in ['sampler', 'profiler']:
+        options.setdefault(name, {})
+        options[name] = globals()[f'propose_fiducial_{name}_options'](options[name].get(name)) | options[name]
     return options
 
 
@@ -468,10 +474,16 @@ def generate_likelihood_options_helper(stats=('mesh2_spectrum', 'mesh3_spectrum'
                                        version='abacus-2ndgen-complete', covariance='holi-v1-altmtl'):
     observables = []
     tracer, zrange = get_full_tracer_zrange(tracer)
+    # FIXME
+    mock_dir = Path('/dvs_ro/cfs/cdirs/desi/mocks/cai/LSS/DA2/mocks/desipipe')
     for stat in stats:
-        observables.append({'stat': stat,
-                            'catalog': {'version': version, 'tracer': tracer, 'zrange': zrange, 'region': region}})
-    covariance = {'version': covariance}
+        catalog = {'version': version, 'tracer': tracer, 'zrange': zrange, 'region': region}
+        if 'data' not in version:
+            catalog['imock'] = '*'  # read all available mocks
+            catalog.setdefault('stats_dir', mock_dir)
+        observables.append({'stat': {'kind': stat},
+                            'catalog': catalog})
+    covariance = {'version': covariance, 'stats_dir': mock_dir}
     return fill_fiducial_likelihood_options({'observables': observables, 'covariance': covariance})
 
 
@@ -502,7 +514,7 @@ def get_full_tracer_zrange(tracerz=None, zrange=None):
 
 
 def _get_level(level: int | dict=None):
-    _default_level = {'stat': 1, 'select': 0, 'catalog': 1, 'theory': 0, 'covariance': 0}
+    _default_level = {'stat': 1, 'catalog': 1, 'theory': 0, 'covariance': 0}
     if level is None: level = {}
     if not isinstance(level, dict):
         level = {name: level for name in _default_level}
@@ -550,8 +562,8 @@ def _str_from_observable_options(options: dict, level: int=None) -> str:
                       'S3': ['mesh3_spectrum'],
                       'BAOR': ['bao', 'recon'],
                       'C2R': ['particle2_correlation', 'recon']}
-    stat = options['stat']
-    # Then, stat and select, e.g. S2-ell0-0.02-0.2-ell2-0.02-0.2
+    stat_options = options['stat']
+    stat = stat_options['kind']
     if level['stat'] >= 1:
         found = None
         for name in translate_stat_name:
@@ -561,9 +573,9 @@ def _str_from_observable_options(options: dict, level: int=None) -> str:
         if found is None:
             raise ValueError(f'could not find shot naame for {stat}')
         out_str.append(found)
-    if level['select'] >= 1:
+    if level['stat'] >= 2:
         select_str = []
-        for ell, limits in options.get('select', {}).items():
+        for ell, limits in stat_options.get('select', {}).items():
             if isinstance(limits, (list, tuple)):
                 if isinstance(ell, (list, tuple)):
                     ell = ''.join([str(ell) for ell in ell])

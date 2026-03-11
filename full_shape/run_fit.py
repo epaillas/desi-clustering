@@ -3,14 +3,15 @@ from pathlib import Path
 import functools
 import argparse
 
-from . import tools
-from .tools import get_likelihood, fill_fiducial_options, generate_likelihood_options_helper
+from full_shape.tools import get_likelihood, fill_fiducial_options, generate_likelihood_options_helper, setup_logging
+from full_shape import tools
+from clustering_statistics import tools as clustering_tools
 
 
 def run_fit_from_options(actions,
-                         get_stats_fn=tools.get_stats_fn,
+                         get_stats_fn=clustering_tools.get_stats_fn,
                          get_fits_fn=tools.get_fits_fn,
-                         cache_dir=str | Path=None, **kwargs):
+                         cache_dir:str | Path=None, **kwargs):
     if isinstance(actions, str):
         actions = [actions]
     options = fill_fiducial_options(kwargs)
@@ -20,23 +21,25 @@ def run_fit_from_options(actions,
     for action in actions:
         if action == 'sample':
             from desilike.samplers import EmceeSampler
-            samplers = {'emcee': EmceeSampler}
-            sampler_options = dict(options['sample'])
+            Samplers = {'emcee': EmceeSampler}
+            sampler_options = dict(options['sampler'])
             cls = sampler_options.pop('sampler', 'emcee')
-            cls = samplers[cls]
+            cls = Samplers[cls]
             save_fn = [get_fits_fn(kind='chain', likelihoods=likelihoods_options, ichain=ichain)\
                        for ichain in range(sampler_options['nchains'])]
-            sampler = cls(**options['init'], save_fn=save_fn)
+            sampler = cls(likelihood, **options['init'], save_fn=save_fn)
             sampler.run(**options['run'])
         elif action == 'profile':
             from desilike.profilers import MinuitProfiler
-            profilers = {'minuit': MinuitProfiler}
-            options = dict(options['profile'])
-            cls = options.pop('profiler', 'minuit')
-            cls = profilers[cls]
+            Profilers = {'minuit': MinuitProfiler}
+            profiler_options = dict(options['profiler'])
+            cls = profiler_options.pop('profiler', 'minuit')
+            cls = Profilers[cls]
             save_fn = get_fits_fn(kind='profiles', likelihoods=likelihoods_options)
-            profiler = cls(**options['init'], save_fn=save_fn)
-            profiler.maximize(**options['maximize'])
+            profiler = cls(likelihood, **profiler_options['init'], save_fn=save_fn)
+            profiler.maximize(**profiler_options['maximize'])
+            if profiler.mpicomm.rank == 0:
+                print(profiler.profiles.to_stats(tablefmt='pretty'))
         else:
             raise NotImplementedError(f'{action} not implemented')
 
@@ -48,17 +51,17 @@ if __name__ == '__main__':
         description='Fit DESI cutsky clustering statistics.',
     )
     parser.add_argument(
-        '--action', type=str, default='sample',
+        '--actions', type=str, default='profile',
         choices=['profile', 'sample'], nargs='*',
         help='Run best fit (maximize) and / or sample.',
     )
     parser.add_argument(
-        '--stats', type=str, nargs='*', default='mesh2_spectrum',
+        '--stats', type=str, nargs='*', default=['mesh2_spectrum'],
         choices=['mesh2_spectrum', 'mesh3_spectrum'],
         help='Statistics to fit.',
     )
     parser.add_argument(
-        '--tracers', nargs='+', type=str, default=['LRG2'],
+        '--tracers', nargs='*', type=str, default=['LRG2'],
         help='Tracer labels (default: LRG2).',
     )
     parser.add_argument(
@@ -84,9 +87,13 @@ if __name__ == '__main__':
         help=f'cache directory for emulators and pre-computed covariance, default is {cache_dir}'
     )
     args = parser.parse_args()
+
+    setup_logging()
     options = {'likelihoods': []}
     for tracer in args.tracers:
-        likelihood_options = generate_likelihood_options_helper(stat=args.stats, version=args.data, tracer=args.tracer, region=args.region,
+        likelihood_options = generate_likelihood_options_helper(stats=args.stats, version=args.data, tracer=tracer, region=args.region,
                                                                 covariance=args.covariance)
         options['likelihoods'].append(likelihood_options)
-    run_fit_from_options(args.actions, get_fits_fn=functools.partial(tools.get_fits_fn, fits_dir=args.fits_dir), **options)
+    run_fit_from_options(args.actions,
+                         get_fits_fn=functools.partial(tools.get_fits_fn, fits_dir=args.fits_dir),
+                         cache_dir=args.cache_dir, **options)
