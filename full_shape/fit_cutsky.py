@@ -131,9 +131,8 @@ def get_cosmology():
     }
     for name, cfg in param_config.items():
         cosmo.params[name].update(**cfg)
-    nparams_cosmo = sum(1 for cfg in param_config.values() if not cfg.get('fixed', False))
 
-    return cosmo, fiducial, nparams_cosmo
+    return cosmo, fiducial
 
 
 # ─── Nuisance priors ─────────────────────────────────────────────────────────
@@ -502,28 +501,17 @@ def get_observables(
     tracer_label, zrange = TRACER_CONFIG[tracer]
     stats = FIT_TYPE_STATS[fit_type]
 
-    # Build cosmology first so we can count free parameters for the
-    # Percival correction before loading the likelihood.
-    cosmo, fiducial, nparams_cosmo = get_cosmology()
+    cosmo, fiducial = get_cosmology()
     sigma8_fid = fiducial.sigma8_z(TRACER_REDSHIFTS[tracer])
+
     nuisance_params = get_nuisance_priors(
         fit_type, prior_basis, width_EFT, width_SN0, width_SN2,
         pt_model=pt_model, b3_coev=b3_coev, sigma8_fid=sigma8_fid,
     )
-    # Analytically marginalised parameters are integrated out exactly and do
-    # not propagate through the noisy covariance, so they should not count
-    # toward the Percival nparams correction.
-    if _is_physical_basis(prior_basis):
-        marg_param_names = {'alpha0p', 'alpha2p', 'alpha4p', 'sn0p', 'sn2p'}
-    else:
-        marg_param_names = {'alpha0', 'alpha2', 'alpha4', 'sn0', 'sn2'}
-    use_analytic_marg = not no_analytic_marg and fit_type in ('ps', 'joint')
-    excluded = marg_param_names if use_analytic_marg else set()
-    nparams_nuisance = sum(
-        1 for name, p in nuisance_params.items()
-        if not p.get('fixed', False) and name not in excluded
-    )
-    nparams = nparams_cosmo + nparams_nuisance
+
+    # For Percival correction:
+    # 7 effective parameters for ps- or bs-only, 9 for joint fit
+    nparams = 7 if fit_type in ('ps', 'bs') else 9
 
     print(f'  Loading precomputed likelihood  (fit_type={fit_type})')
     lk = prepare_fiducial_likelihoods(
@@ -732,9 +720,12 @@ def profile(likelihood, filename):
     """
     for param in likelihood.all_params.select(solved=True):
         param.update(derived='.best')
-    profiler = MinuitProfiler(likelihood, save_fn=filename)
-    profiler.maximize()
+    profiler = MinuitProfiler(likelihood, save_fn=filename, seed=42)
+    profiler.maximize(niterations=1)
     print(profiler.profiles.to_stats(tablefmt='pretty'))
+
+def test(likelihood):
+    print(likelihood())
 
 
 # ─── Entry point ─────────────────────────────────────────────────────────────
@@ -745,7 +736,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--todo', type=str, default='sample',
-        choices=['profile', 'sample'], nargs='*',
+        choices=['profile', 'sample', 'test'], nargs='*',
         help='Run best fit (maximize) and / or sample.',
     )
     parser.add_argument(
@@ -829,8 +820,8 @@ if __name__ == '__main__':
         help='Directory for Taylor emulator files (default: ./emulators).',
     )
     parser.add_argument(
-        '--emulator_order', type=int, default=3,
-        help='Taylor emulator expansion order (default: 3).',
+        '--emulator_order', type=int, default=4,
+        help='Taylor emulator expansion order (default: 4).',
     )
     parser.add_argument(
         '--GR_criteria', type=float, default=0.1,
@@ -920,3 +911,6 @@ if __name__ == '__main__':
 
     if 'profile' in args.todo:
         profile(likelihood, profiles_fn)
+
+    if 'test' in args.todo:
+        test(likelihood)
