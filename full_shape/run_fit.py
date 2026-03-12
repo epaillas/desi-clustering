@@ -50,8 +50,8 @@ def run_fit_from_options(actions,
             cls = Samplers[cls]
             save_fn = [get_fits_fn(kind='chain', likelihoods=likelihoods_options, ichain=ichain)\
                        for ichain in range(sampler_options['nchains'])]
-            sampler = cls(likelihood, **options['init'], save_fn=save_fn)
-            sampler.run(**options['run'])
+            sampler = cls(likelihood, **sampler_options['init'], save_fn=save_fn)
+            sampler.run(**sampler_options['run'])
         elif action == 'profile':
             from desilike.profilers import MinuitProfiler
             Profilers = {'minuit': MinuitProfiler}

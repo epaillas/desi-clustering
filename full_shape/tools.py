@@ -619,7 +619,7 @@ def propose_fiducial_sampler_options(sampler=None):
     """Return dictionary of default sampler configuration."""
     if sampler is None:
         sampler = 'emcee'
-    fiducial_options = {'sampler': sampler, 'init': {},' run': {}, 'nchains': 4}
+    fiducial_options = {'sampler': sampler, 'init': {}, 'run': {}, 'nchains': 4}
     return fiducial_options
 
 
