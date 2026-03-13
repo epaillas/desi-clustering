@@ -99,8 +99,7 @@ if __name__ == '__main__':
         '--covariance', type=str, default='holi-v1-altmtl',
         help='Covariance mock set (default: holi-v1-altmtl).',
     )
-    # fits_dir = Path(os.getenv('SCRATCH')) / 'fits'
-    fits_dir = Path('.') / '_fits/chains'
+    fits_dir = Path(os.getenv('SCRATCH')) / 'fits'
     parser.add_argument(
         '--fits_dir', type=str, default=fits_dir,
         help=f'base directory for fits, default is {fits_dir}'
