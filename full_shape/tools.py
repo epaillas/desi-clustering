@@ -535,6 +535,10 @@ def get_single_likelihood(likelihood_options, stats: types.GaussianLikelihood=No
         for label, pole in window.observable.items(level=None):
             z = pole.attrs['zeff']
         theory = get_theory(stat, theory=observable_options['theory'], z=z, cosmo=cosmo, fiducial=fiducial)
+        namespace = _str_from_observable_options(
+            observable_options, level={'catalog': 1, 'stat': 0, 'theory': 0, 'covariance': 0})
+        for param in theory.init.params:
+            param.update(namespace=namespace)
         theory_params = theory.init.params
         observable = cls(data=data, window=window, theory=theory)
         observable()
